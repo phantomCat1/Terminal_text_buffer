@@ -12,7 +12,9 @@ public class Cell {
         this.character = character;
         this.attributes = attributes;
     }
-
+    public boolean isEmpty(){
+        return this.character == '\0';
+    }
     // Basic getters and setters
 
     public char getCharacter() {

@@ -18,7 +18,7 @@ public class TerminalBuffer {
     private final List<Line> screen;
 
     // First element is the oldest line that will be eliminated next, last element is the most recent line added to scrollback.
-    private final Deque<Line> scrollBack;
+    private final List<Line> scrollBack;
 
     public TerminalBuffer(int width, int height, int maxScrollBack, CellAttributes attributes) {
 
@@ -32,7 +32,7 @@ public class TerminalBuffer {
         for (int i = 0; i < height; i++) {
             screen.add(new Line(width, new Cell('\0', attributes)));
         }
-        this.scrollBack =  new ArrayDeque<>();
+        this.scrollBack =  new ArrayList<>(maxScrollBack);
         this.cursorRow = 0;
         this.cursorColumn = 0;
         this.attributes = attributes;
@@ -67,7 +67,7 @@ public class TerminalBuffer {
      */
     public void setCurrentAttributes(CellAttributes attrs) {
         if (attrs == null) {
-            throw new IllegalArgumentException("Attributes cannot be null");
+            throw new NullPointerException("Attributes cannot be null");
         }
         this.attributes = attrs;
     }
@@ -75,34 +75,34 @@ public class TerminalBuffer {
     /** Sets the foreground color ({@code null} = default terminal foreground). */
     public void setForeground(TerminalColor fg) {
         if (fg == null) {
-            this.attributes.setDefaultForegroundColor();
+            this.attributes = this.attributes.setDefaultForegroundColor();
             return;
         }
-        this.attributes.setForegroundColor(fg);
+        this.attributes = this.attributes.setForegroundColor(fg);
     }
 
     /** Sets the background color ({@code null} = default terminal background). */
     public void setBackground(TerminalColor bg) {
         if (bg == null) {
-            this.attributes.setDefaultBackgroundColor();
+            this.attributes = this.attributes.setDefaultBackgroundColor();
             return;
         }
-        this.attributes.setBackgroundColor(bg);
+        this.attributes = this.attributes.setBackgroundColor(bg);
     }
 
     /** Enables or disables the bold style flag. */
     public void setBold(boolean bold) {
-        this.attributes.setBold(bold);
+        this.attributes = this.attributes.setBold(bold);
     }
 
     /** Enables or disables the italic style flag. */
     public void setItalic(boolean italic) {
-        this.attributes.setItalic(italic);
+        this.attributes = this.attributes.setItalic(italic);
     }
 
     /** Enables or disables the underline style flag. */
     public void setUnderline(boolean underline) {
-        this.attributes.setUnderline(underline);
+        this.attributes = this.attributes.setUnderline(underline);
     }
 
     /** Resets all current attributes to their defaults. */
@@ -144,7 +144,7 @@ public class TerminalBuffer {
     }
     public void moveCursorRight(int N){
         if (N < 0) throw new IllegalArgumentException("N must be >= 0");
-        this.cursorRow  = Math.min(width-1, this.cursorRow + N);
+        this.cursorColumn  = Math.min(width-1, this.cursorColumn + N);
     }
 
     //_______________________________________________________________
@@ -156,10 +156,13 @@ public class TerminalBuffer {
      * @param text text to be written on this line
      * */
     public void writeOnLine(String text) {
-        if(text == null) throw new IllegalArgumentException("Text cannot be null");
+        if(text == null) throw new NullPointerException("Text cannot be null");
         for (int i = 0; i < text.length(); i++) {
             char ch = text.charAt(i);
-            if(this.cursorColumn >= width) return;
+            if(this.cursorColumn >= width) {
+                this.cursorColumn = width-1;
+                return;
+            }
             writeCharToCursor(ch);
         }
     }
@@ -171,12 +174,13 @@ public class TerminalBuffer {
      * @param text to be inserted on this line
      */
     public void insertOnLine(String text) {
-        if(text == null) throw new IllegalArgumentException("Text cannot be null");
+        if(text == null) throw new NullPointerException("Text cannot be null");
         for (int i = 0; i < text.length(); i++) {
             char ch = text.charAt(i);
             if(this.cursorColumn >= width) advanceCursorToNextLine();
             writeCharToCursor(ch);
         }
+        if(this.cursorColumn >= width) advanceCursorToNextLine();
     }
 
     /**
@@ -238,7 +242,7 @@ public class TerminalBuffer {
     //Content access methods
     //_______________________________________________________________
 
-    /** Returns the character at the given <em>absolute</em> position across the
+    /** Returns the character at the given absolute position across the
      * combined scrollback + screen buffer.
      * @param row 0 is the oldest scrollback line
      * @return either a character or {@code '\0'} if empty */
@@ -246,39 +250,76 @@ public class TerminalBuffer {
         return getActualLine(row).getCell(column).getCharacter();
     }
 
+    /**
+     * Returns character at a particular position on screen.
+     * @return character at position if input is correct
+     */
+    public char getScreenCharAt(int row, int col) {
+        return screen.get(checkScreenRow(row)).getCell(col).getCharacter();
+    }
+    /**
+     * Returns character at a particular position on scrollback.
+     * @return character at position if input is correct
+     */
+    public char getScrollbackCharAt(int row, int col) {
+        if(row < 0 || row >= scrollBack.size()) throw new IllegalArgumentException("row out of bounds");
+        return scrollBack.get(row).getCell(col).getCharacter();
+    }
+
     /**  Returns the {@link CellAttributes} at the given absolute position. */
     public CellAttributes getAttributesAt(int row, int column) {
         return getActualLine(row).getCell(column).getAttributes();
     }
 
+    /** Return the attributes of a cell on the screen at the given position*/
+    public CellAttributes getScreenAttributesAt(int row, int col) {
+        return screen.get(checkScreenRow(row)).getCell(col).getAttributes();
+    }
+    /** Return the attributes of a cell on the screen at the given position*/
+    public CellAttributes getScrollbackAttributesAt(int col, int row) {
+        if(row < 0 || row >= scrollBack.size()) throw new IllegalArgumentException("row out of bounds");
+        return screen.get(row).getCell(col).getAttributes();
+    }
+
     /** Converts a {@code Line} at the absolute {@code row} (any line from the combined screen and scrollback) to string*/
     public String getLineString(int row){
-        return getActualLine(row).toString();
+        return getActualLine(row).toPlainString();
+    }
+    public String getScreenLineString(int row){
+        if(row < 0) throw new IllegalArgumentException("row must be >= 0");
+        if(row >= height) throw new IllegalArgumentException("row must be <= height");
+        return screen.get(row).toPlainString();
+    }
+    public String getScrollbackLineString(int row){
+        if(row < 0) throw new IllegalArgumentException("row must be >= 0");
+        if(row >= scrollBack.size()) throw new IllegalArgumentException("row must be <= size of scrollback");
+        return scrollBack.get(row).toPlainString();
     }
 
     /** Method to convert the {@code screen} to string*/
     public String getScreenString() {
-        StringBuilder sb = new StringBuilder();
-        for(Line line : screen) {
-            sb.append(line.toString()).append('\n');
+        StringBuilder sb = new StringBuilder(height * (width + 1));
+        for(Line line : screen){
+            sb.append(line.toPlainString()).append('\n');
         }
         return sb.toString();
     }
     /** Method to convert the {@code scrollback} to string*/
     public String getScroolbackString(){
-        StringBuilder sb = new StringBuilder();
+        StringBuilder sb = new StringBuilder(scrollBack.size() * (width + 1));
         for(Line line : scrollBack) {
-            sb.append(line.toString()).append('\n');
+            sb.append(line.toPlainString()).append('\n');
         }
         return sb.toString();
     }
     /** Used to get the combined scrollback and screen as string*/
      @Override
      public String toString() {
-        StringBuilder sb = new StringBuilder();
+         int totalLines = scrollBack.size() + height;
+        StringBuilder sb = new StringBuilder(totalLines * (width + 1));
         String screenString = getScreenString();
         String scroolbackString = getScroolbackString();
-        sb.append(screenString).append('\n').append(scroolbackString);
+        sb.append(scroolbackString).append(screenString);
         return sb.toString();
      }
 
@@ -297,11 +338,7 @@ public class TerminalBuffer {
             throw new IndexOutOfBoundsException("Absolute row " + row + " out of range [0, " + total + ")");
         }
         if (row < sbSize) {
-            int idx = 0;
-            for (Line line : scrollBack) {
-                if (idx == row) return line;
-                idx++;
-            }
+            return scrollBack.get(row);
         }
         return screen.get(row - sbSize);
     }
@@ -316,6 +353,7 @@ public class TerminalBuffer {
         Line toWrite = screen.get(this.cursorRow);
         Cell cell = toWrite.getCell(this.cursorColumn);
         cell.setCharacter(ch);
+        this.cursorColumn += 1;
         if(this.attributes.equals(cell.getAttributes())) return;
         cell.setAttributes(this.attributes);
     }
@@ -344,11 +382,19 @@ public class TerminalBuffer {
     private void pushTopLineToScrollback() {
         Line top = screen.removeFirst();
         if (maxScrollBack > 0) {
-            scrollBack.addLast(top);
+            scrollBack.add(top);
             while (scrollBack.size() > maxScrollBack) {
                 scrollBack.removeFirst();
             }
         }
+    }
+
+    private int checkScreenRow(int row) {
+        if (row < 0 || row >= height) {
+            throw new IndexOutOfBoundsException(
+                    "Screen row " + row + " out of range [0, " + height + ")");
+        }
+        return row;
     }
 
 

@@ -39,26 +39,26 @@ public final class CellAttributes {
 
     // Descriptive setters
 
-    public void setForegroundColor(TerminalColor foregroundColor) {
-        this.foregroundColor = foregroundColor;
+    public CellAttributes setForegroundColor(TerminalColor foregroundColor) {
+        return new  CellAttributes(foregroundColor, this.backgroundColor, this.bold, this.italic, this.underline);
     }
-    public void setDefaultForegroundColor() {
-        this.foregroundColor = null;
+    public CellAttributes setDefaultForegroundColor() {
+        return new  CellAttributes(null, this.backgroundColor, this.bold, this.italic, this.underline);
     }
-    public void setBackgroundColor(TerminalColor backgroundColor) {
-        this.backgroundColor = backgroundColor;
+    public CellAttributes setBackgroundColor(TerminalColor backgroundColor) {
+        return new  CellAttributes(this.foregroundColor, backgroundColor,  this.bold, this.italic, this.underline);
     }
-    public void setDefaultBackgroundColor() {
-        this.backgroundColor = null;
+    public CellAttributes setDefaultBackgroundColor() {
+        return new   CellAttributes(this.foregroundColor, null, this.bold, this.italic, this.underline);
     }
-    public void setBold(boolean bold) {
-        this.bold = bold;
+    public CellAttributes setBold(boolean bold) {
+        return new CellAttributes(this.foregroundColor, this.backgroundColor, bold, this.italic, this.underline);
     }
-    public void setItalic(boolean italic) {
-        this.italic = italic;
+    public CellAttributes setItalic(boolean italic) {
+        return new CellAttributes(this.foregroundColor, this.backgroundColor, this.bold, italic, this.underline);
     }
-    public void setUnderline(boolean underline) {
-        this.underline = underline;
+    public CellAttributes setUnderline(boolean underline) {
+        return new CellAttributes(this.foregroundColor, this.backgroundColor, this.bold, this.italic, underline);
     }
 
     // Support methods. May come in handy later

@@ -17,3 +17,11 @@ Design Decision 2:\
     The Arraylist case can cover both cases if you initialize it with a given size, so you minimize the number of useless internal re-allocations.
     Then, it makes the second scenario less expensive.\
 
+Design Decision 3:\
+Decided to make CellAttribute objects immutable. The reason for this, as opposed to before, is that in the current implementation it is possible that multiple Cells reference the same CellAttributes object. This is fine, since the attributes are meant to be set from the terminal emulator by default and it is not the usual case that you can just change one cell's attributes only. However, to allow for this option (more flexibility), I made it so every attribute change returns a new object. This ensures that when changing the attributes of one cell
+you do not change the attributes of all cell referencing the previous attributes object. a question might be why not have all Cells have their own CellAttribute. Since attribute changes usually happen from the terminal once for all the next changes that could be made (and not so often as well),
+having multiple Cells reference the same attributes reduces resources.\
+
+Tests Decision 1:\
+Decided to create more tests for TerminalBuffer than the other classes, which are quite simple.
+Used AI to generate unit tests, checked that they are valid, was careful about edge cases.

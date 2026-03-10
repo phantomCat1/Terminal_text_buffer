@@ -41,6 +41,10 @@ public class Cell {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (!(o instanceof Cell c)) return false;
+        if (attributes == null && c.attributes == null) {
+            return character == c.character;
+        } else if (attributes == null) return false;
+
         return character == c.character
                 && attributes.equals(c.attributes);
     }
@@ -53,6 +57,6 @@ public class Cell {
     @Override
     public String toString() {
         if (character == '\0') return "Cell{EMPTY}";
-        return "Cell{'" + character + ", " + attributes + "}";
+        return "Cell{" + character + ", " + attributes + "}";
     }
 }

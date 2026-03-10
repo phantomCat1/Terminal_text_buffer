@@ -14,8 +14,8 @@ public class Line {
         if (width <= 0) throw new IllegalArgumentException("Width must be positive, got: " + width);
         if (cell == null) throw new IllegalArgumentException("Cell is null");
         this.cells = new ArrayList<>(width);
-        for(Cell c : cells) {
-            c = new Cell(cell.getCharacter(), cell.getAttributes());
+        for(int i=0; i<width; i++) {
+            cells.add(new Cell(cell.getCharacter(), cell.getAttributes()));
         }
     }
 
@@ -58,12 +58,16 @@ public class Line {
         }
     }
 
+    public String toPlainString() {
+        StringBuilder sb = new StringBuilder(cells.size());
+        for (Cell c : cells) {
+            sb.append(c.isEmpty() ? ' ' : c.getCharacter());
+        }
+        return sb.toString();
+    }
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder();
-        for (Cell cell : cells) {
-            sb.append(cell.isEmpty() ? ' ': cell.getCharacter());
-        }
-        return "Line [" + sb.toString() + "]";
+
+        return "Line[" + toPlainString() + "]";
     }
 }

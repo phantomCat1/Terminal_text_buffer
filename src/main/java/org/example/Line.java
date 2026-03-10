@@ -10,12 +10,24 @@ public class Line {
     // Then, it makes the second scenario less expensive.
     private List<Cell> cells;
 
-    public Line(int width) {
+    public Line(int width, Cell cell) {
+        if (width <= 0) throw new IllegalArgumentException("Width must be positive, got: " + width);
+        if (cell == null) throw new IllegalArgumentException("Cell is null");
         this.cells = new ArrayList<>(width);
+        for(Cell c : cells) {
+            c = new Cell(cell.getCharacter(), cell.getAttributes());
+        }
     }
 
-    public Line(List<Cell> cells) {
-        this.cells = new ArrayList<>(cells);
+    public Line(int width) {
+        this(width, Cell.EMPTY);
+    }
+
+    public Line(List<Cell> cellList) {
+        this.cells = new ArrayList<>();
+        for(Cell c : cellList) {
+            this.cells.add(new Cell(c.getCharacter(), c.getAttributes()));
+        }
     }
 
     public int getWidth() {
@@ -34,7 +46,10 @@ public class Line {
 
     // Fill all cells in the list with a particular one
     public void fill(Cell cell) {
-        cells.replaceAll(ignored -> cell);
+        for(Cell c : cells) {
+            c.setCharacter(cell.getCharacter());
+            c.setAttributes(cell.getAttributes());
+        }
     }
 
     private void checkColumn(int col) {

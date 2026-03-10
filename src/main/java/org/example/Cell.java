@@ -12,6 +12,11 @@ public class Cell {
         this.character = character;
         this.attributes = attributes;
     }
+
+    public Cell(char character) {
+        this(character, CellAttributes.DEFAULT);
+    }
+
     public boolean isEmpty(){
         return this.character == '\0';
     }

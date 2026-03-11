@@ -686,7 +686,71 @@ class TerminalBufferTest {
         }
     }
 
+    @Nested
+    @DisplayName("Wide characters")
+    class WideCharacters {
 
+        @Test
+        @DisplayName("WideCharUtil detects CJK characters")
+        void detectsCJK() {
+            assertTrue(WideCharUtil.isWide('\u4E2D')); // 中
+            assertTrue(WideCharUtil.isWide('\u6587')); // 文
+            assertFalse(WideCharUtil.isWide('A'));
+            assertFalse(WideCharUtil.isWide('1'));
+        }
 
+        @Test
+        @DisplayName("Wide char advances cursor by 2")
+        void wideCursorAdvance() {
+            TerminalBuffer buf = new TerminalBuffer(10, 3);
+            buf.writeOnLine("\u4E2D"); // 中
+            assertEquals(2, buf.getCursorColumn());
+        }
+
+        @Test
+        @DisplayName("Wide char sets continuation cell")
+        void wideContinuationCell() {
+            TerminalBuffer buf = new TerminalBuffer(10, 3);
+            buf.writeOnLine("\u4E2D");
+            assertEquals('\u4E2D', buf.getScreenCharAt(0, 0));
+            assertEquals('\0',    buf.getScreenCharAt(0, 1)); // continuation
+        }
+
+        @Test
+        @DisplayName("Mixed wide and narrow characters in writeText")
+        void mixedWidthWrite() {
+            TerminalBuffer buf = new TerminalBuffer(10, 3);
+            buf.writeOnLine("A\u4E2DB"); // A + 中 (wide) + B
+            // A at col 0, 中 at col 1+2, B at col 3
+            assertEquals('A',     buf.getScreenCharAt(0, 0));
+            assertEquals('\u4E2D', buf.getScreenCharAt(0, 1));
+            assertEquals('\0',    buf.getScreenCharAt(0, 2)); // continuation
+            assertEquals('B',     buf.getScreenCharAt(0, 3));
+            assertEquals(4, buf.getCursorColumn());
+        }
+
+        @Test
+        @DisplayName("Wide char at end of line is dropped in writeOnLine (no room for continuation)")
+        void wideCharAtEndDropped() {
+            // Buffer width 3, write two narrow + one wide: wide is at col 2 but needs col 3
+            TerminalBuffer buf = new TerminalBuffer(3, 3);
+            buf.writeOnLine("AB\u4E2D"); // AB = 2 cols, 中 needs 2 cols but only 1 left, so it is dropped
+            assertEquals('A', buf.getScreenCharAt(0, 0));
+            assertEquals('B', buf.getScreenCharAt(0, 1));
+            assertEquals('\0', buf.getScreenCharAt(0, 2));
+        }
+
+        @Test
+        @DisplayName("insertText wraps before wide char that won't fit in last column")
+        void insertTextWrapsBeforeWide() {
+            TerminalBuffer buf = new TerminalBuffer(5, 3);
+            // Fill 4 columns then try to insert a wide char: should wrap to next line
+            buf.writeOnLine("ABCD"); // cursor now at col 4 (last col)
+            buf.insertOnLine("\u4E2D"); // wide char, needs 2 cols, only 1 left → wrap
+            assertEquals('\0', buf.getScreenCharAt(0, 4)); // last col of row 0 untouched
+            assertEquals('\u4E2D', buf.getScreenCharAt(1, 0)); // wide char on row 1
+            assertEquals('\0',    buf.getScreenCharAt(1, 1)); // continuation
+        }
+    }
 
 }

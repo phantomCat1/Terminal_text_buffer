@@ -27,7 +27,7 @@ public class TerminalBuffer {
         this.maxScrollBack = maxScrollBack;
         this.screen = new ArrayList<>(height);
         for (int i = 0; i < height; i++) {
-            screen.add(new Line(width, new Cell('\0', attributes)));
+            screen.add(new Line(width, new Cell(Cell.EMPTY_CHARACTER, attributes, false, false)));
         }
         this.scrollBack =  new ArrayDeque<>();
         this.cursorRow = 0;
@@ -152,12 +152,14 @@ public class TerminalBuffer {
      *  Does not perform wrapping and characters are just dropped if the width is exceeded
      *  Moves the cursor to the end of the text or if text reaches the width of the terminal, it remains at the last cell.
      *  Needs to manually have the cursor position changed to write anything else in the last case, using {@code setCursorPosition(row, col)}
+     * Wide characters advance the cursor by 2. If a wide character starts/ is written to column width-1, then it is dropped, instead of being written only half.
      * @param text text to be written on this line
      * */
     public void writeOnLine(String text) {
         if(text == null) throw new NullPointerException("Text cannot be null");
         for (int i = 0; i < text.length(); i++) {
             char ch = text.charAt(i);
+            if(WideCharUtil.isWide(ch) && this.cursorColumn + 1 >= width) return;
             if(this.cursorColumn >= width) {
                 this.cursorColumn = width-1;
                 return;
@@ -173,7 +175,8 @@ public class TerminalBuffer {
      * In non-override mode it pushes the existing text forward.
      * Wraps around the line if text exceeds width of screen. It creates a new line and pushes the oldest one to
      * the scrollback if text is inserted on the last line of the screen.
-     * Moves cursor to the end of text
+     * A wide character that starts on the width-1 column is fully wrapped to the next line (no splitting).
+     * Moves cursor to the end of text. Wide characters advance the cursor by 2.
      * @param text to be inserted on this line
      */
     public void insertOnLine(String text) {
@@ -204,6 +207,8 @@ public class TerminalBuffer {
         }
         for (int i = 0; i < toInsert.length(); i++) {
             char ch = toInsert.charAt(i);
+            boolean wide = WideCharUtil.isWide(ch);
+            if(wide && this.cursorColumn == width-1) advanceCursorToNextLine();
             if(this.cursorColumn >= width) advanceCursorToNextLine();
             writeCharToCursor(ch);
         }
@@ -212,15 +217,19 @@ public class TerminalBuffer {
     }
 
     /**
-     * Fills all cells in a line with the given character, keeping the current set attributes
-     * Does not move the cursor
+     * Fills all cells in a line with the given character, keeping the current set attributes.
+     * Cannot fill the line with wide characters.
+     * Does not move the cursor.
      * @param lineNumber line to be filled
      * @param character character to fill the line with
      */
     public void fillLine(int lineNumber, char character) {
         if(lineNumber < 0) throw new IllegalArgumentException("lineNumber must be >= 0");
         if(lineNumber >= height) throw new IllegalArgumentException("lineNumber must be <= width");
-        Cell fillCell = character == '\0' ? Cell.EMPTY : new Cell(character, attributes);
+        if (character != Cell.EMPTY_CHARACTER && WideCharUtil.isWide(character)) {
+            throw new IllegalArgumentException("Cannot fill line with a wide character");
+        }
+        Cell fillCell = (character == Cell.EMPTY_CHARACTER) ? Cell.EMPTY : new Cell(character, attributes, false, false);
         screen.get(lineNumber).fill(fillCell);
     }
 
@@ -417,10 +426,12 @@ public class TerminalBuffer {
 
     private void writeCharToCursor(char ch) {
         if (this.cursorColumn >= width) return;
+        boolean wide = WideCharUtil.isWide(ch);
         Line toWrite = screen.get(this.cursorRow);
         Cell cell = toWrite.getCell(this.cursorColumn);
         cell.setCharacter(ch);
-        this.cursorColumn += 1;
+        if (wide) cell.setWide(true);
+        this.cursorColumn += wide ? 2 : 1;
         if(this.attributes.equals(cell.getAttributes())) return;
         cell.setAttributes(this.attributes);
     }
@@ -437,7 +448,7 @@ public class TerminalBuffer {
         } else {
             // Bottom of screen: scroll up
             pushTopLineToScrollback();
-            screen.add(new Line(width, new Cell('\0', attributes)));
+            screen.add(new Line(width, new Cell(Cell.EMPTY_CHARACTER, attributes, false, false)));
             // cursorRow stays at height-1
         }
     }

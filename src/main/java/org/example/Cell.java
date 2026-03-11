@@ -5,20 +5,47 @@ import java.util.Objects;
 public class Cell {
     private CellAttributes attributes;
     private char character;
+    private boolean wide;
+    private boolean wideContinuation;
+    public static final char EMPTY_CHARACTER = '\0';
+    public static final Cell EMPTY = new Cell(EMPTY_CHARACTER, CellAttributes.DEFAULT, false, false);
 
-    public static final Cell EMPTY = new Cell('\0', CellAttributes.DEFAULT);
-
-    public Cell(char character, CellAttributes attributes) {
+    public Cell(char character, CellAttributes attributes, boolean wide, boolean wideContinuation) {
+        if (wide && wideContinuation) {
+            throw new IllegalArgumentException("A cell cannot be both wide and wideContinuation");
+        }
         this.character = character;
         this.attributes = attributes;
+        this.wide = wide;
+        this.wideContinuation = wideContinuation;
+    }
+
+    public Cell(char character, CellAttributes attributes) {
+        this(character, attributes, false, false);
     }
 
     public Cell(char character) {
-        this(character, CellAttributes.DEFAULT);
+        this(character, CellAttributes.DEFAULT, false, false);
+    }
+
+    public boolean isWide(){
+        return this.wide;
+    }
+
+    public boolean isWideContinuation(){
+        return this.wideContinuation;
+    }
+
+    public void setWide(boolean wide){
+        this.wide = wide;
+    }
+
+    public void setWideContinuation(boolean wideContinuation){
+        this.wideContinuation = wideContinuation;
     }
 
     public boolean isEmpty(){
-        return this.character == '\0';
+        return this.character == EMPTY_CHARACTER && !wide;
     }
     // Basic getters and setters
 
@@ -46,17 +73,20 @@ public class Cell {
         } else if (attributes == null) return false;
 
         return character == c.character
+                && wide == c.wide
+                && wideContinuation == c.wideContinuation
                 && attributes.equals(c.attributes);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(character, attributes);
+        return Objects.hash(character, attributes, wide, wideContinuation);
     }
 
     @Override
     public String toString() {
-        if (character == '\0') return "Cell{EMPTY}";
-        return "Cell{" + character + ", " + attributes + "}";
+        if (wideContinuation) return "Cell{WIDE_CONTINUATION}";
+        if (character == EMPTY_CHARACTER) return "Cell{EMPTY}";
+        return "Cell{" + character + ", " +(wide ? "wide, " : "") + attributes + "}";
     }
 }

@@ -196,7 +196,8 @@ class LineTest {
             Cell newCell = new Cell('C', CellAttributes.DEFAULT.setUnderline(true));
             line.setCell(1, newCell);
 
-            assertSame(newCell, line.getCell(1), "The exact cell object should be stored");
+            assertEquals(newCell, line.getCell(1), "The cell object stored should be a deep copy");
+            assertNotSame(newCell, line.getCell(1));
             assertEquals('C', line.getCell(1).getCharacter());
             assertTrue(line.getCell(1).getAttributes().isUnderline());
         }

@@ -38,6 +38,12 @@ Could have also been implemented as writing text to the beginning of the line wh
 In override mode, it overrides (so creative :) ) the text already present, while in non-override mode it pushes the existing text forwards, possibly creating a new line to wrap the line and pushing the oldest line on the screen to scrollback. 
 Wrapping is supported in both modes. It moves the cursor position to the end of the inserted text.
 
+Design Decision 6: \
+    Created cursor support for wide characters ( CJK ideographs, emoji, etc.).
+These characters occupy 2 cells. The first cell stores a boolean "wide" and the actual wide character value. The second cell is simply a placeholder, storing a boolean "wideContinuation".
+Wide characters advance the cursor by 2.
+If a wide character is written to the width-1 column, it is either dropped (if writeOnLine() is used) or it is fully wrapped, i.e. no splitting occurs (if insertOnLine() is used).
+
 Tests Decision 1:\
 Decided to create more tests for TerminalBuffer than the other classes, which are quite simple.
 Used AI to generate unit tests, checked that they are valid, was careful about edge cases.

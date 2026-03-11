@@ -42,7 +42,7 @@ class TerminalBufferTest {
         @DisplayName("Screen starts blank (spaces)")
         void screenStartsBlank() {
             TerminalBuffer buf = new TerminalBuffer(5, 3);
-            System.out.println(buf.getScreenString());
+
             assertEquals("     \n     \n     \n", buf.getScreenString());
         }
     }
@@ -241,7 +241,7 @@ class TerminalBufferTest {
     }
 
     @Nested
-    @DisplayName("writeText (overwrite)")
+    @DisplayName("writeOnLine (overwrite)")
     class WriteTextTests {
 
         TerminalBuffer buf;
@@ -253,7 +253,6 @@ class TerminalBufferTest {
         @DisplayName("Writes characters at cursor and advances cursor")
         void basicWrite() {
             buf.writeOnLine("Hello");
-            System.out.println(buf.getScreenString());
             assertEquals("Hello     ", buf.getScreenLineString(0));
             assertEquals(5, buf.getCursorColumn());
             assertEquals(0, buf.getCursorRow());
@@ -307,7 +306,7 @@ class TerminalBufferTest {
     }
 
     @Nested
-    @DisplayName("insertText (wrapping)")
+    @DisplayName("insertOnLine (wrapping)")
     class InsertTextTests {
 
         @Test
@@ -343,10 +342,49 @@ class TerminalBufferTest {
         }
 
         @Test
-        @DisplayName("insertText with null throws")
+        @DisplayName("insertOnLine with null throws")
         void insertNull() {
             TerminalBuffer buf = new TerminalBuffer(10, 3);
             assertThrows(NullPointerException.class, () -> buf.insertOnLine(null));
+        }
+
+        @Test
+        @DisplayName("insertOnLine non-override mode basic")
+        void insertOnLineNonOverrideModeBasic() {
+            TerminalBuffer buf = new TerminalBuffer(10, 3);
+            buf.insertOnLine("ABCDEFGHIJ");
+            buf.setCursorPosition(0, 2);
+            buf.insertOnLine("12345", false);
+            assertEquals(0, buf.getCursorRow());
+            assertEquals(7, buf.getCursorColumn());
+            assertEquals("AB12345CDE", buf.getScreenLineString(0));
+            assertEquals("FGHIJ     ", buf.getScreenLineString(1));
+        }
+
+        @Test
+        @DisplayName("insertOnLine non-override mode wraps line and pushes to scrollback")
+        void insertOnLineNonOverrideModeWrapsLine() {
+            TerminalBuffer buf = new TerminalBuffer(10, 1);
+            buf.writeOnLine("ABCDEFGHI ");
+            buf.setCursorPosition(0, 2);
+            buf.insertOnLine("12345", false);
+            assertEquals(0, buf.getCursorRow());
+            assertEquals(7, buf.getCursorColumn());
+            assertEquals("AB12345CDE", buf.getScrollbackLineString(0));
+            assertEquals("FGHI      ", buf.getScreenLineString(0));
+        }
+
+        @Test
+        @DisplayName("insertOnLine non-override mode dispalced text ends at end of line")
+        void insertOnLineNonOverrideModeDispalcedTextEndsAtEndOfLine() {
+            TerminalBuffer buf = new TerminalBuffer(10, 1);
+            buf.insertOnLine("ABCDE");
+            buf.setCursorPosition(0, 2);
+            buf.insertOnLine("12345", false);
+            assertEquals(0, buf.getCursorRow());
+            assertEquals(7, buf.getCursorColumn());
+            assertEquals("AB12345CDE", buf.getLineString(0));
+            assertEquals(1, buf.getHeight());
         }
     }
 
@@ -530,7 +568,6 @@ class TerminalBufferTest {
 
             buf.insertOnLine("DEF");
             String full = buf.toString();
-            System.out.println(full);
             assertEquals("ABC\nDEF\n   \n", full);
         }
     }
@@ -602,6 +639,50 @@ class TerminalBufferTest {
         void outOfRangeThrows() {
             assertThrows(IndexOutOfBoundsException.class, () -> buf.getScreenCharAt(0, 10));
             assertThrows(IndexOutOfBoundsException.class, () -> buf.getLineString(-1));
+        }
+
+        @Test
+        @DisplayName("Get scrollback character")
+        void getScrollbackChar() {
+            buf.writeOnLine("ABCDEFGHIJ");
+            buf.insertLine();
+            buf.setCursorPosition(0,0);
+            assertEquals('A', buf.getScrollbackCharAt(0,0));
+            assertEquals('B', buf.getScrollbackCharAt(0,1));
+            buf.writeOnLine("XYZ");
+            buf.insertLine();
+            assertEquals('A', buf.getScrollbackCharAt(1,0));
+            assertEquals('X', buf.getScrollbackCharAt(0,0));
+        }
+
+        @Test
+        @DisplayName("Get scrollback attributes")
+        void getScrollbackAttributes() {
+            buf.writeOnLine("ABCDEFGHIJ");
+            buf.insertLine();
+            buf.setCursorPosition(0,0);
+            CellAttributes attr = new CellAttributes(TerminalColor.RED, TerminalColor.BLUE, true, false, true);
+            assertNotEquals(attr, buf.getScrollbackAttributesAt(0,0));
+            buf.setCurrentAttributes(attr);
+            buf.writeOnLine("XYZ");
+            assertEquals(attr, buf.getScreenAttributesAt(0,0));
+            buf.insertLine();
+            assertEquals('X', buf.getScrollbackCharAt(0,0));
+            assertEquals(attr, buf.getScrollbackAttributesAt(0,0));
+        }
+
+        @Test
+        @DisplayName("Get scrollback line as string")
+        void getScrollbackLineAsString() {
+            buf.writeOnLine("ABCDEFGHIJ");
+            buf.insertLine();
+            buf.setCursorPosition(0,0);
+            buf.writeOnLine("ZZZZZZZ");
+            buf.insertLine();
+            buf.insertLine();
+            assertEquals("ABCDEFGHIJ", buf.getScrollbackLineString(2));
+            assertEquals("ZZZZZZZ   ", buf.getScrollbackLineString(1));
+            assertEquals("          ", buf.getScrollbackLineString(0));
         }
     }
 

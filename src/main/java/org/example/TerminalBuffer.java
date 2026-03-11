@@ -1,9 +1,6 @@
 package org.example;
 
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.Deque;
-import java.util.List;
+import java.util.*;
 
 public class TerminalBuffer {
     private int width;
@@ -18,7 +15,7 @@ public class TerminalBuffer {
     private final List<Line> screen;
 
     // First element is the oldest line that will be eliminated next, last element is the most recent line added to scrollback.
-    private final List<Line> scrollBack;
+    private final Deque<Line> scrollBack;
 
     public TerminalBuffer(int width, int height, int maxScrollBack, CellAttributes attributes) {
 
@@ -32,7 +29,7 @@ public class TerminalBuffer {
         for (int i = 0; i < height; i++) {
             screen.add(new Line(width, new Cell('\0', attributes)));
         }
-        this.scrollBack =  new ArrayList<>(maxScrollBack);
+        this.scrollBack =  new ArrayDeque<>();
         this.cursorRow = 0;
         this.cursorColumn = 0;
         this.attributes = attributes;
@@ -150,9 +147,11 @@ public class TerminalBuffer {
     //_______________________________________________________________
     //Editing methods
     //_______________________________________________________________
-    /** Writes text on the line beginning at the cursor position on the screen, overriding the existing text
+    /** Writes text on the line beginning at the cursor position on the screen, overriding the existing text.
+     * Uses the terminal's attributes
      *  Does not perform wrapping and characters are just dropped if the width is exceeded
-     *  Moves the cursor to the end of the text
+     *  Moves the cursor to the end of the text or if text reaches the width of the terminal, it remains at the last cell.
+     *  Needs to manually have the cursor position changed to write anything else in the last case, using {@code setCursorPosition(row, col)}
      * @param text text to be written on this line
      * */
     public void writeOnLine(String text) {
@@ -168,19 +167,48 @@ public class TerminalBuffer {
     }
 
     /**
-     * Inserts text on the current line of the cursor, beginning at cursor position.
-     * Wraps around the line if text exceeds width of screen, possibly overriding the text already added
+     * Inserts text on the current line of the cursor, beginning at cursor position, using the terminal attributes.
+     * Has two modes of operation: override and non-override
+     * In override mode it overrides the text already present.
+     * In non-override mode it pushes the existing text forward.
+     * Wraps around the line if text exceeds width of screen. It creates a new line and pushes the oldest one to
+     * the scrollback if text is inserted on the last line of the screen.
      * Moves cursor to the end of text
      * @param text to be inserted on this line
      */
     public void insertOnLine(String text) {
+        insertOnLine(text, true);
+    }
+    public void insertOnLine(String text, boolean override) {
         if(text == null) throw new NullPointerException("Text cannot be null");
-        for (int i = 0; i < text.length(); i++) {
-            char ch = text.charAt(i);
+        String toInsert = text;
+        int newCursorColumn = (this.cursorColumn + text.length()) % width;
+        int newCursorRow = this.cursorRow+ (this.cursorColumn + text.length()) / width;
+        if(!override) {
+            StringBuilder sb = new StringBuilder(text.length() + 1);
+            sb.append(text);
+            int col = this.cursorColumn;
+            int row = this.cursorRow;
+            char ch = getScreenCharAt(row, col);
+            while(ch != '\0') {
+                sb.append(ch);
+                col += 1;
+                if(col >= width) {
+                    col = 0;
+                    row += 1;
+                    if(row >= height) break;
+                }
+                ch = getScreenCharAt(row, col);
+            }
+            toInsert = sb.toString();
+        }
+        for (int i = 0; i < toInsert.length(); i++) {
+            char ch = toInsert.charAt(i);
             if(this.cursorColumn >= width) advanceCursorToNextLine();
             writeCharToCursor(ch);
         }
-        if(this.cursorColumn >= width) advanceCursorToNextLine();
+        if(this.cursorColumn >= width && override) advanceCursorToNextLine();
+        else setCursorPosition(newCursorRow, newCursorColumn);
     }
 
     /**
@@ -263,7 +291,16 @@ public class TerminalBuffer {
      */
     public char getScrollbackCharAt(int row, int col) {
         if(row < 0 || row >= scrollBack.size()) throw new IllegalArgumentException("row out of bounds");
-        return scrollBack.get(row).getCell(col).getCharacter();
+        int idx = 0;
+        Iterator<Line> it = scrollBack.descendingIterator();
+        while (it.hasNext()) {
+            Line line = it.next();
+            if (idx == row) {
+                return line.getCell(col).getCharacter();
+            };
+            idx++;
+        }
+        return '\0';
     }
 
     /**  Returns the {@link CellAttributes} at the given absolute position. */
@@ -276,9 +313,18 @@ public class TerminalBuffer {
         return screen.get(checkScreenRow(row)).getCell(col).getAttributes();
     }
     /** Return the attributes of a cell on the screen at the given position*/
-    public CellAttributes getScrollbackAttributesAt(int col, int row) {
+    public CellAttributes getScrollbackAttributesAt(int row, int col) {
         if(row < 0 || row >= scrollBack.size()) throw new IllegalArgumentException("row out of bounds");
-        return screen.get(row).getCell(col).getAttributes();
+        int idx = 0;
+        Iterator<Line> it = scrollBack.descendingIterator();
+        while (it.hasNext()) {
+            Cell cell =  it.next().getCell(col);
+            if (idx == row) {
+                return cell.getAttributes();
+            };
+            idx++;
+        }
+        return CellAttributes.DEFAULT;
     }
 
     /** Converts a {@code Line} at the absolute {@code row} (any line from the combined screen and scrollback) to string*/
@@ -290,10 +336,27 @@ public class TerminalBuffer {
         if(row >= height) throw new IllegalArgumentException("row must be <= height");
         return screen.get(row).toPlainString();
     }
+
+    /**
+     * Returns the Line at the given {@code row} beginning from the last added one as a string.
+     * @param row 0 is the last line that was added to scrollback (most recent line)
+     * @return
+     */
     public String getScrollbackLineString(int row){
         if(row < 0) throw new IllegalArgumentException("row must be >= 0");
         if(row >= scrollBack.size()) throw new IllegalArgumentException("row must be <= size of scrollback");
-        return scrollBack.get(row).toPlainString();
+        int idx = 0;
+        Iterator<Line> it = scrollBack.descendingIterator();
+        StringBuilder sb = new StringBuilder();
+        while (it.hasNext()) {
+            Line line = it.next();
+            if (idx == row) {
+                sb.append(line.toPlainString());
+                break;
+            };
+            idx++;
+        }
+        return sb.toString();
     }
 
     /** Method to convert the {@code screen} to string*/
@@ -305,7 +368,7 @@ public class TerminalBuffer {
         return sb.toString();
     }
     /** Method to convert the {@code scrollback} to string*/
-    public String getScroolbackString(){
+    public String getScrollbackString(){
         StringBuilder sb = new StringBuilder(scrollBack.size() * (width + 1));
         for(Line line : scrollBack) {
             sb.append(line.toPlainString()).append('\n');
@@ -318,7 +381,7 @@ public class TerminalBuffer {
          int totalLines = scrollBack.size() + height;
         StringBuilder sb = new StringBuilder(totalLines * (width + 1));
         String screenString = getScreenString();
-        String scroolbackString = getScroolbackString();
+        String scroolbackString = getScrollbackString();
         sb.append(scroolbackString).append(screenString);
         return sb.toString();
      }
@@ -338,7 +401,11 @@ public class TerminalBuffer {
             throw new IndexOutOfBoundsException("Absolute row " + row + " out of range [0, " + total + ")");
         }
         if (row < sbSize) {
-            return scrollBack.get(row);
+            int idx = 0;
+            for (Line line : scrollBack) {
+                if (idx == row) return line;
+                idx++;
+            }
         }
         return screen.get(row - sbSize);
     }
@@ -382,7 +449,7 @@ public class TerminalBuffer {
     private void pushTopLineToScrollback() {
         Line top = screen.removeFirst();
         if (maxScrollBack > 0) {
-            scrollBack.add(top);
+            scrollBack.addLast(top);
             while (scrollBack.size() > maxScrollBack) {
                 scrollBack.removeFirst();
             }

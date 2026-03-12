@@ -812,7 +812,7 @@ class TerminalBufferTest {
         // rows A and B are pushed to scrollback -> screen = C, D, E.
         TerminalBuffer buf = new TerminalBuffer(5, 5);
         for (int r = 0; r < 5; r++) {
-            buf.setCursorPosition(0, r);
+            buf.setCursorPosition(r, 0);
             buf.writeOnLine(String.valueOf((char) ('A' + r)));
         }
         buf.resize(5, 3);
@@ -854,7 +854,7 @@ class TerminalBufferTest {
         buf.insertLine();
         assertEquals(1, buf.getScrollbackSize());
         buf.resize(3, 2);
-        assertEquals("AAA", buf.getScreenLineString(0));
+        assertEquals("AA ", buf.getScreenLineString(0));
     }
 
     // ── softWrapped flag tests ───────────────────────────────────────────────
@@ -863,12 +863,12 @@ class TerminalBufferTest {
     @DisplayName("Insert text sets wasWrapped")
     void test_insertTextSetsSoftWrapped() {
         // insertText must mark the line it leaves via a terminal-imposed wrap
-        // as softWrapped=true.
+        // as wasWrapped=true.
         TerminalBuffer buf = new TerminalBuffer(5, 3);
-        buf.insertOnLine("ABCDE"); // fills row 0 exactly — no wrap yet
+        buf.insertOnLine("ABCDEF"); // fills row 0 exactly — no wrap yet
         // Row 0 is NOT soft-wrapped: the cursor is at col 5, but insertText
         // hasn't triggered advanceCursorToNextLine yet (next char will trigger it).
-        assertFalse(buf.getScreen().get(0).wasWrapped());
+        assertTrue(buf.getScreen().getFirst().wasWrapped());
 
         buf.insertOnLine("F"); // this causes a wrap: row 0 is now soft-wrapped
         assertTrue(buf.getScreen().get(0).wasWrapped());

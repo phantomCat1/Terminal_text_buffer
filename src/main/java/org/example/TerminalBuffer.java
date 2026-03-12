@@ -414,7 +414,10 @@ public class TerminalBuffer {
         for (int j = sbSize; j < reflowed.size(); j++) {
             screen.add(reflowed.get(j));
         }
-        while (screen.size() > height) pushTopLineToScrollback();
+        while (screen.size() > height) {
+            if(screen.getLast().isNotDirty()) screen.removeLast();
+            else pushTopLineToScrollback();
+        }
         while (screen.size() < height) screen.add(new Line(newWidth));
     }
 
@@ -661,12 +664,8 @@ public class TerminalBuffer {
         if (this.cursorColumn >= width) return;
         boolean wide = WideCharUtil.isWide(ch);
         Line toWrite = screen.get(this.cursorRow);
-        Cell cell = toWrite.getCell(this.cursorColumn);
-        cell.setCharacter(ch);
-        if (wide) cell.setWide(true);
+        toWrite.setCell(this.cursorColumn, new Cell(ch, attributes, wide, false));
         this.cursorColumn += wide ? 2 : 1;
-        if(this.attributes.equals(cell.getAttributes())) return;
-        cell.setAttributes(this.attributes);
     }
 
 

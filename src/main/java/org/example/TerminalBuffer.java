@@ -48,6 +48,8 @@ public class TerminalBuffer {
     public int getHeight()         { return height; }
     public int getMaxScrollback()  { return maxScrollBack; }
     public int getScrollbackSize() { return scrollBack.size(); }
+    public List<Line> getScreen() {return screen;}
+    public List<Line> getScrollBack() {return scrollBack.stream().toList();}
 
     //_______________________________________________________________
     //Attributes methods
@@ -250,7 +252,7 @@ public class TerminalBuffer {
      */
     public void insertLine(){
         pushTopLineToScrollback();
-        screen.add(new Line(width, Cell.EMPTY));
+        screen.add(new Line(width, new Cell(Cell.EMPTY_CHARACTER, attributes, false, false)));
 
     }
 
@@ -273,6 +275,237 @@ public class TerminalBuffer {
     public void clearAll(){
         clearScreen();
         scrollBack.clear();
+    }
+
+    //_______________________________________________________________
+    //Resize buffer methods
+    //_______________________________________________________________
+    /**
+     * This method handles resize of the terminal buffer. It allows a minimum new height and width of 1.
+     * It resizes both the screen and the scrollback to ensure consistent behavior.
+     * Width resize was implemented by Claude, with me checking the output and guiding it further until the desired behavior was achieved.
+     * I also made sure that object copies or use of references is correct and somewhat optimal.
+     * If width increases, rows are padded with cells matching the current attributes and text that was previously wrapped gets unwrapped.
+     *      This implemented by setting a {@code wasWrapped} flag to true whenever an {@code insertOnLine()} operation or a width decrease is used.
+     * If width decreases, empty cells are truncated while text gets wrapped, potentially pushing top lines to the scrollback.
+     * If height increases, empty rows (with the current attributes) are simply inserted in the screen.
+     * If height decreases, empty rows are truncated while the bottom rows of text are maintained, potentially pushing the top rows to scrollback.
+     *      This is achieved by having each row maintain a {@code isDirty} boolean that keeps track if the line contains any non-empty cells.
+     */
+    public void resize(int newWidth, int newHeight){
+        newHeight = Math.max(1, newHeight);
+        newWidth = Math.max(1, newWidth);
+
+        if(newWidth > width) increaseWidthBy(newWidth - width);
+        else if(newWidth < width) decreaseWidthBy(width - newWidth);
+
+        width = newWidth;
+
+        if(newHeight > height) increaseHeightBy(newHeight - height);
+        else if(newHeight < height) decreaseHeightBy(height - newHeight);
+
+        height = newHeight;
+
+        cursorColumn = clamp(cursorColumn, 0, width  - 1);
+        cursorRow = clamp(cursorRow, 0, height - 1);
+
+    }
+
+    private void increaseWidthBy(int increaseBy){
+        int newWidth = width + increaseBy;
+
+        // Build a unified list (scrollback first, then screen) so the unwrap
+        // pass can see across the scrollback/screen boundary uniformly.
+        List<Line> all = new ArrayList<>(scrollBack.size() + screen.size());
+        // copy to avoid aliasing
+        all.addAll(scrollBack);
+        all.addAll(screen);
+
+        // Reflow pass: walk each line.  If isSoftWrapped() is true, this line
+        // and its successor belong to the same logical paragraph — append
+        // content without a hard break so they can be re-partitioned together.
+        // Otherwise insert a hard break (pad to the next line boundary).
+        List<Cell> cellStream = new ArrayList<>();
+        for (int i = 0; i < all.size(); i++) {
+            Line cur = all.get(i);
+            appendNonTrailingEmpty(cellStream, cur);
+            if (!cur.wasWrapped()) {
+                // Hard line break: pad to the next newWidth boundary.
+                padCellStreamToLineEnd(cellStream, newWidth);
+            }
+            // If softWrapped, we simply continue — no padding — so the content
+            // of the next line is appended directly after this one.
+        }
+        // Ensure the stream length is a multiple of newWidth.
+        padCellStreamToLineEnd(cellStream, newWidth);
+
+        // Partition the merged stream back into Lines of newWidth.
+        // Continuation lines produced here are NOT soft-wrapped (the logical
+        // paragraph still fits within newWidth or will be split again naturally).
+        List<Line> reflowed = partitionIntoLines(cellStream, newWidth);
+
+        // Write back into scrollback and screen, preserving the original
+        // scrollback size.
+        int sbSize = scrollBack.size();
+        scrollBack.clear();
+        for (int j = 0; j < sbSize && j < reflowed.size(); j++) {
+            scrollBack.addLast(reflowed.get(j));
+        }
+        while (scrollBack.size() > maxScrollBack) scrollBack.removeFirst();
+
+        screen.clear();
+        for (int j = sbSize; j < reflowed.size(); j++) {
+            screen.add(reflowed.get(j));
+        }
+        // Re-establish screen height.
+        while (screen.size() < height) screen.add(new Line(newWidth));
+        while (screen.size() > height) pushTopLineToScrollback();
+    }
+
+    private void decreaseWidthBy(int decreaseBy){
+        int newWidth = width - decreaseBy;
+
+        List<Line> reflowed = new ArrayList<>();
+
+        List<Line> allLines = new ArrayList<>(scrollBack.size() + screen.size());
+        allLines.addAll(scrollBack);
+        allLines.addAll(screen);
+
+        for (Line line : allLines) {
+
+            if (line.isNotDirty()) {
+                // Blank line — keep as a single blank line at the new width.
+
+                reflowed.add(new Line(newWidth));
+            } else {
+                // Collect the content cells (strip trailing empty).
+
+                List<Cell> content = new ArrayList<>();
+                appendNonTrailingEmpty(content, line);
+                padCellStreamToLineEnd(content, newWidth);
+
+                List<Line> wrapped = partitionIntoLines(content, newWidth);
+
+                // Every line except the last is a soft-wrap continuation —
+                // they were created by this resize and must be undoable.
+                for (int i = 0; i < wrapped.size() - 1; i++) {
+                    wrapped.get(i).setWrapped(true);
+                }
+                // The final line inherits the original line's soft-wrap flag:
+                // if the original was itself soft-wrapped (i.e. it was a
+                // continuation from a previous wrap), the last chunk continues
+                // that paragraph; otherwise it is a hard line end.
+                wrapped.getLast().setWrapped(line.wasWrapped());
+
+                reflowed.addAll(wrapped);
+            }
+        }
+
+        // Write scrollback portion back.
+        int sbSize = scrollBack.size();
+        scrollBack.clear();
+        for (int j = 0; j < sbSize && j < reflowed.size(); j++) {
+            scrollBack.addLast(reflowed.get(j));
+        }
+        while (scrollBack.size() > maxScrollBack) scrollBack.removeFirst();
+
+        // Write screen portion back.
+        screen.clear();
+        for (int j = sbSize; j < reflowed.size(); j++) {
+            screen.add(reflowed.get(j));
+        }
+        while (screen.size() > height) pushTopLineToScrollback();
+        while (screen.size() < height) screen.add(new Line(newWidth));
+    }
+
+    private void increaseHeightBy(int increaseBy){
+        for(int i=0; i< increaseBy; i++){
+            screen.add(new Line(width, Cell.EMPTY));
+        }
+    }
+
+    private void decreaseHeightBy(int decreaseBy){
+        int toRemove = decreaseBy;
+
+        // first drop non-dirty/ empty rows from the bottom.
+        while (toRemove > 0 && !screen.isEmpty() && screen.getLast().isNotDirty()) {
+            screen.removeLast();
+            toRemove--;
+        }
+
+        // push top rows (dirty or not) to scrollback.
+        while (toRemove > 0 && !screen.isEmpty()) {
+            pushTopLineToScrollback();
+            toRemove--;
+        }
+    }
+
+    //----------------------------------------------------------------
+    // Resize utilities
+    //----------------------------------------------------------------
+    /**
+     * Appends all cells of {@code line} except trailing empty cells to {@code out}.
+     * Used so that when two soft-wrapped lines are merged there is no gap of
+     * empty cells between their content.
+     */
+    private static void appendNonTrailingEmpty(List<Cell> out, Line line) {
+
+        // Find rightmost non-empty cell
+        int last = -1;
+        for (int i = line.getWidth()-1; i >= 0; i--) {
+            Cell c = line.getCell(i);
+            if (!c.isEmpty() && !c.isWideContinuation()) { last = i; break; }
+        }
+        for (int i = 0; i <= last; i++) {
+            out.add(line.getCell(i));
+        }
+    }
+
+    /**
+     * Pads {@code stream} with empty cells up to the next multiple of
+     * {@code lineWidth}, creating a hard line break in the reflow output.
+     */
+    private void padCellStreamToLineEnd(List<Cell> stream, int lineWidth) {
+        int rem = stream.size() % lineWidth;
+        if (rem != 0) {
+            int pad = lineWidth - rem;
+            for (int i = 0; i < pad; i++) stream.add(Cell.EMPTY);
+        }
+    }
+
+    /**
+     * Partitions a flat list of cells into {@link Line}s of {@code lineWidth} each.
+     * Wide cells that would straddle a line boundary are pushed to the next line.
+     * The returned lines have {@code softWrapped = false}; callers are responsible
+     * for stamping the flag where appropriate.
+     */
+    private List<Line> partitionIntoLines(List<Cell> cells, int lineWidth) {
+        List<Line> result = new ArrayList<>();
+        int i = 0;
+        while (i < cells.size()) {
+            Line line = new Line(lineWidth);
+            int col = 0;
+            while (col < lineWidth && i < cells.size()) {
+                Cell cell = cells.get(i);
+                if (cell.isWide()) {
+                    if (col + 1 >= lineWidth) {
+                        // Wide char won't fit — leave this column empty and wrap.
+                        break;
+                    }
+                    line.setCell(col, cell); // setCell handles the continuation
+                    col += 2;
+                } else {
+                    line.setCell(col, cell);
+                    col++;
+                }
+                i++;
+            }
+            // Skip any wide-continuation tokens left in the stream (they were
+            // regenerated by setCell above and should not be placed again).
+            while (i < cells.size() && cells.get(i).isWideContinuation()) i++;
+            result.add(line);
+        }
+        return result;
     }
 
     //_______________________________________________________________

@@ -54,7 +54,9 @@ class TerminalBufferTest {
         TerminalBuffer buf;
 
         @BeforeEach
-        void setUp() { buf = new TerminalBuffer(20, 5); }
+        void setUp() {
+            buf = new TerminalBuffer(20, 5);
+        }
 
         @Test
         @DisplayName("Default attributes are all-default")
@@ -144,7 +146,9 @@ class TerminalBufferTest {
         TerminalBuffer buf;
 
         @BeforeEach
-        void setUp() { buf = new TerminalBuffer(10, 5); }
+        void setUp() {
+            buf = new TerminalBuffer(10, 5);
+        }
 
         @Test
         @DisplayName("setCursorPosition sets exact position")
@@ -247,7 +251,9 @@ class TerminalBufferTest {
         TerminalBuffer buf;
 
         @BeforeEach
-        void setUp() { buf = new TerminalBuffer(10, 5); }
+        void setUp() {
+            buf = new TerminalBuffer(10, 5);
+        }
 
         @Test
         @DisplayName("Writes characters at cursor and advances cursor")
@@ -395,7 +401,9 @@ class TerminalBufferTest {
         TerminalBuffer buf;
 
         @BeforeEach
-        void setUp() { buf = new TerminalBuffer(5, 3); }
+        void setUp() {
+            buf = new TerminalBuffer(5, 3);
+        }
 
         @Test
         @DisplayName("Fills entire current row with given char")
@@ -551,7 +559,7 @@ class TerminalBufferTest {
             TerminalBuffer buf = new TerminalBuffer(5, 2, 100);
             buf.writeOnLine("LINE1");
             buf.insertLine();
-            buf.setCursorPosition(0,0);
+            buf.setCursorPosition(0, 0);
             buf.insertOnLine("LINE2");
             buf.insertLine();
             // scrollback[0] = "LINE1", scrollback[1] = "LINE2", screen[0] = blank
@@ -625,7 +633,7 @@ class TerminalBufferTest {
         void getCharAt() {
             buf.writeOnLine("ABCDEFGHIJ"); // fills row 0
             buf.insertLine();       // row 0 moves to scrollback
-            buf.setCursorPosition(0,0);
+            buf.setCursorPosition(0, 0);
             buf.writeOnLine("XYZ");
 
             // Scrollback row 0
@@ -646,13 +654,13 @@ class TerminalBufferTest {
         void getScrollbackChar() {
             buf.writeOnLine("ABCDEFGHIJ");
             buf.insertLine();
-            buf.setCursorPosition(0,0);
-            assertEquals('A', buf.getScrollbackCharAt(0,0));
-            assertEquals('B', buf.getScrollbackCharAt(0,1));
+            buf.setCursorPosition(0, 0);
+            assertEquals('A', buf.getScrollbackCharAt(0, 0));
+            assertEquals('B', buf.getScrollbackCharAt(0, 1));
             buf.writeOnLine("XYZ");
             buf.insertLine();
-            assertEquals('A', buf.getScrollbackCharAt(1,0));
-            assertEquals('X', buf.getScrollbackCharAt(0,0));
+            assertEquals('A', buf.getScrollbackCharAt(1, 0));
+            assertEquals('X', buf.getScrollbackCharAt(0, 0));
         }
 
         @Test
@@ -660,15 +668,15 @@ class TerminalBufferTest {
         void getScrollbackAttributes() {
             buf.writeOnLine("ABCDEFGHIJ");
             buf.insertLine();
-            buf.setCursorPosition(0,0);
+            buf.setCursorPosition(0, 0);
             CellAttributes attr = new CellAttributes(TerminalColor.RED, TerminalColor.BLUE, true, false, true);
-            assertNotEquals(attr, buf.getScrollbackAttributesAt(0,0));
+            assertNotEquals(attr, buf.getScrollbackAttributesAt(0, 0));
             buf.setCurrentAttributes(attr);
             buf.writeOnLine("XYZ");
-            assertEquals(attr, buf.getScreenAttributesAt(0,0));
+            assertEquals(attr, buf.getScreenAttributesAt(0, 0));
             buf.insertLine();
-            assertEquals('X', buf.getScrollbackCharAt(0,0));
-            assertEquals(attr, buf.getScrollbackAttributesAt(0,0));
+            assertEquals('X', buf.getScrollbackCharAt(0, 0));
+            assertEquals(attr, buf.getScrollbackAttributesAt(0, 0));
         }
 
         @Test
@@ -676,7 +684,7 @@ class TerminalBufferTest {
         void getScrollbackLineAsString() {
             buf.writeOnLine("ABCDEFGHIJ");
             buf.insertLine();
-            buf.setCursorPosition(0,0);
+            buf.setCursorPosition(0, 0);
             buf.writeOnLine("ZZZZZZZ");
             buf.insertLine();
             buf.insertLine();
@@ -713,7 +721,7 @@ class TerminalBufferTest {
             TerminalBuffer buf = new TerminalBuffer(10, 3);
             buf.writeOnLine("\u4E2D");
             assertEquals('\u4E2D', buf.getScreenCharAt(0, 0));
-            assertEquals('\0',    buf.getScreenCharAt(0, 1)); // continuation
+            assertEquals('\0', buf.getScreenCharAt(0, 1)); // continuation
         }
 
         @Test
@@ -722,10 +730,10 @@ class TerminalBufferTest {
             TerminalBuffer buf = new TerminalBuffer(10, 3);
             buf.writeOnLine("A\u4E2DB"); // A + 中 (wide) + B
             // A at col 0, 中 at col 1+2, B at col 3
-            assertEquals('A',     buf.getScreenCharAt(0, 0));
+            assertEquals('A', buf.getScreenCharAt(0, 0));
             assertEquals('\u4E2D', buf.getScreenCharAt(0, 1));
-            assertEquals('\0',    buf.getScreenCharAt(0, 2)); // continuation
-            assertEquals('B',     buf.getScreenCharAt(0, 3));
+            assertEquals('\0', buf.getScreenCharAt(0, 2)); // continuation
+            assertEquals('B', buf.getScreenCharAt(0, 3));
             assertEquals(4, buf.getCursorColumn());
         }
 
@@ -749,8 +757,223 @@ class TerminalBufferTest {
             buf.insertOnLine("\u4E2D"); // wide char, needs 2 cols, only 1 left → wrap
             assertEquals('\0', buf.getScreenCharAt(0, 4)); // last col of row 0 untouched
             assertEquals('\u4E2D', buf.getScreenCharAt(1, 0)); // wide char on row 1
-            assertEquals('\0',    buf.getScreenCharAt(1, 1)); // continuation
+            assertEquals('\0', buf.getScreenCharAt(1, 1)); // continuation
         }
     }
 
+    @Nested
+    @DisplayName("Resize operation")
+    class ResizeOperation {
+        @Test
+        @DisplayName("Resize width wider")
+        void test_resizeWider() {
+            TerminalBuffer buf = new TerminalBuffer(5, 3);
+            buf.writeOnLine("Hello");
+            buf.resize(10, 3);
+            assertEquals(10, buf.getWidth());
+            assertEquals("Hello     ", buf.getScreenLineString(0));
+        }
+
+        @Test
+        @DisplayName("Resize narrower") // Fails because apparently the isDirty flag is not set when writing.
+        void test_resizeNarrower() {
+            // writeText does not wrap: "Hello World" in a 10-wide buffer writes "Hello Worl"
+            // on row 0 only (the 'd' is dropped); rows 1 and 2 are blank.
+            // decreaseWidthBy wraps the dirty line into "Hello" + " Worl" (2 lines),
+            // and keeps 2 blank lines → 4 lines total.  Screen height is 3, so "Hello"
+            // is pushed to scrollback.
+            TerminalBuffer buf = new TerminalBuffer(10, 3);
+            buf.writeOnLine("Hello World");
+            buf.resize(5, 3);
+            assertEquals(5, buf.getWidth());
+            assertEquals(1, buf.getScrollbackSize());
+            assertEquals("Hello", buf.getLineString(0));   // scrollback
+            assertEquals(" Worl", buf.getScreenLineString(0));
+            assertEquals("     ", buf.getScreenLineString(1));
+            assertEquals("     ", buf.getScreenLineString(2));
+        }
+
+
+    @Test
+    @DisplayName("Resize taller")
+    void test_resizeTaller() {
+        TerminalBuffer buf = new TerminalBuffer(5, 2);
+        buf.resize(5, 5);
+        assertEquals(5, buf.getHeight());
+        for (int r = 2; r < 5; r++) {
+            assertEquals("     ", buf.getScreenLineString(r));
+        }
+    }
+
+    @Test
+    @DisplayName("Resize Shorter")
+    void test_resizeShorter() {
+        // All 5 rows are dirty (A-E). No clean rows to drop from bottom, so top
+        // rows A and B are pushed to scrollback -> screen = C, D, E.
+        TerminalBuffer buf = new TerminalBuffer(5, 5);
+        for (int r = 0; r < 5; r++) {
+            buf.setCursorPosition(0, r);
+            buf.writeOnLine(String.valueOf((char) ('A' + r)));
+        }
+        buf.resize(5, 3);
+        assertEquals(3, buf.getHeight());
+        assertEquals("C    ", buf.getScreenLineString(0));
+        assertEquals("D    ", buf.getScreenLineString(1));
+        assertEquals("E    ", buf.getScreenLineString(2));
+        assertEquals(2, buf.getScrollbackSize());
+        assertEquals("A    ", buf.getLineString(0));
+        assertEquals("B    ", buf.getLineString(1));
+    }
+
+    @Test
+    @DisplayName("Resize clamps crusor")
+    void test_resizeClampsCursor() {
+        TerminalBuffer buf = new TerminalBuffer(10, 10);
+        buf.setCursorPosition(9, 9);
+        buf.resize(5, 5);
+        assertEquals(4, buf.getCursorColumn());
+        assertEquals(4, buf.getCursorRow());
+    }
+
+    @Test
+    @DisplayName("Invalid resize reduces to 1")
+    void test_invalidResizeThrows() {
+        // resize() clamps to minimum 1 instead of throwing.
+        TerminalBuffer buf = new TerminalBuffer(5, 5);
+        buf.resize(0, 5);
+        assertEquals(1, buf.getWidth());
+        buf.resize(5, 0);
+        assertEquals(1, buf.getHeight());
+    }
+
+    @Test
+    @DisplayName("Scrollback resized")
+    void test_scrollbackResized() {
+        TerminalBuffer buf = new TerminalBuffer(5, 2, 100);
+        buf.writeOnLine("AAAAA");
+        buf.insertLine();
+        assertEquals(1, buf.getScrollbackSize());
+        buf.resize(3, 2);
+        assertEquals("AAA", buf.getScreenLineString(0));
+    }
+
+    // ── softWrapped flag tests ───────────────────────────────────────────────
+
+    @Test
+    @DisplayName("Insert text sets wasWrapped")
+    void test_insertTextSetsSoftWrapped() {
+        // insertText must mark the line it leaves via a terminal-imposed wrap
+        // as softWrapped=true.
+        TerminalBuffer buf = new TerminalBuffer(5, 3);
+        buf.insertOnLine("ABCDE"); // fills row 0 exactly — no wrap yet
+        // Row 0 is NOT soft-wrapped: the cursor is at col 5, but insertText
+        // hasn't triggered advanceCursorToNextLine yet (next char will trigger it).
+        assertFalse(buf.getScreen().get(0).wasWrapped());
+
+        buf.insertOnLine("F"); // this causes a wrap: row 0 is now soft-wrapped
+        assertTrue(buf.getScreen().get(0).wasWrapped());
+        assertFalse(buf.getScreen().get(1).wasWrapped()); // row 1 is not wrapped yet
+    }
+
+    @Test
+    @DisplayName("WriteOnLine never sets wasWrapped")
+    void test_writeTextNeverSetsSoftWrapped() {
+        // writeText never wraps, so it must never set the softWrapped flag.
+        TerminalBuffer buf = new TerminalBuffer(5, 3);
+        buf.writeOnLine("ABCDE"); // fills row 0 to the last column
+        assertFalse(buf.getScreen().getFirst().wasWrapped());
+        // Manually move to the next row and fill it too.
+        buf.setCursorPosition(0, 1);
+        buf.writeOnLine("FGHIJ");
+        assertFalse(buf.getScreen().get(1).wasWrapped());
+    }
+
+    @Test
+    @DisplayName("Wide unwraps insertOnLine")
+    void test_widenUnwrapsInsertText() {
+        // Text written via insertText across two lines should be joined when
+        // the terminal is made wider.
+        // Width=5: "ABCDEFGH" wraps as row0="ABCDE"(softWrapped), row1="FGH  "
+        // Widen to 10: the two rows should merge back to "ABCDEFGH  "
+        TerminalBuffer buf = new TerminalBuffer(5, 3);
+        buf.insertOnLine("ABCDEFGH");
+        assertTrue(buf.getScreen().get(0).wasWrapped());
+        buf.resize(10, 3);
+        assertEquals("ABCDEFGH  ", buf.getScreenLineString(0));
+        assertEquals("          ", buf.getScreenLineString(1));
+    }
+
+    @Test
+    @DisplayName("Widening keeps cursor positioned lines separate")
+    void test_widenKeepsCursorPositionedLinesSeparate() {
+        // "ABCDE" written via writeText fills row 0 to the last column, but
+        // softWrapped=false because no terminal-imposed wrap occurred.
+        // Then the cursor is manually moved to row 1 and "FGHIJ" is written.
+        // Widening must NOT merge these two lines.
+        TerminalBuffer buf = new TerminalBuffer(5, 3);
+        buf.writeOnLine("ABCDE");          // row 0 full, softWrapped=false
+        buf.setCursorPosition(0, 1);
+        buf.writeOnLine("FGHIJ");          // row 1 independent
+        assertFalse(buf.getScreen().get(0).wasWrapped());
+        buf.resize(10, 3);
+        // After widening the lines stay separate — each padded to the new width.
+        assertEquals("ABCDE     ", buf.getScreenLineString(0));
+        assertEquals("FGHIJ     ", buf.getScreenLineString(1));
+        assertEquals("          ", buf.getScreenLineString(2));
+    }
+
+    @Test
+    @DisplayName("Narrow then widen round trips")
+    void test_narrowThenWidenRoundTrips() {
+        // insertText("Hello World") at width=10:
+        //   row0="Hello Worl"(sw=true), row1="d         "(sw=false)
+        // resize(5,4): "Hello Worl"(sw=true) splits into "Hello"(sw=true) + " Worl"(sw=true).
+        //   "d" stays as "d    "(sw=false).  "Hello" overflows height=4 so it goes to scrollback.
+        //   sb=["Hello"(sw=true)], screen=[" Worl"(sw=true), "d    ", blank, blank]
+        // resize(10,4): increaseWidthBy merges " Worl"(sw=true) with "d    "(sw=false)
+        //   to form " Worold"? No — " Worl" flows into "d" → " Worold" is wrong.
+        //   Actually the scrollback "Hello"(sw=true) also flows into screen[0] " Worl"(sw=true).
+        //   all = [Hello(sw=T), Worl(sw=T), d(sw=F), blank, blank]
+        //   stream = "Hello" + " Worl" + "d" (no break after Hello or Worl, break after d)
+        //          = "Hello World" (11 chars) padded to 20 → lines: "Hello Worl" + "d         "
+        //   sbSize was 1 → scrollback gets reflowed[0]="Hello Worl", screen gets ["d    ",blank,blank,blank]
+        TerminalBuffer buf = new TerminalBuffer(10, 4);
+        buf.insertOnLine("Hello World");
+        buf.resize(5, 4);
+        buf.resize(10, 4);
+        // After round-trip: "Hello Worl" is in scrollback (size 1), screen starts with "d".
+        assertEquals(1, buf.getScrollbackSize());
+        assertEquals("Hello Worl", buf.getLineString(0));
+        assertEquals("d         ", buf.getScreenLineString(0));
+    }
+
+    @Test
+    @DisplayName("Decrease wraps continuations")
+    void test_decreaseSoftWrapsContinuations() {
+        // writeText("ABCDEFGHIJ") at width=10 fills row 0, softWrapped=false.
+        // resize(5,3): the line splits into "ABCDE"(sw=true) + "FGHIJ"(sw=false).
+        // "ABCDE" overflows screen height=3 during the write-back (3 screen lines
+        // after reflow: "ABCDE", "FGHIJ", blank) so it stays in screen slot 0
+        // and "FGHIJ" in slot 1.  However the screen originally had 3 lines with
+        // only row 0 dirty, so after adding the overflow line the screen has 3
+        // lines: "ABCDE", "FGHIJ", blank — all fit.
+        // Actually: original sb=0, screen=["ABCDEFGHIJ","blank","blank"].
+        // decreaseWidthBy processes each line:
+        //   "ABCDEFGHIJ" dirty → splits to ["ABCDE"(sw=T),"FGHIJ"(sw=F)]
+        //   blank → blank
+        //   blank → blank
+        // reflowed = ["ABCDE","FGHIJ","blank","blank"]: 4 lines.
+        // sbSize=0: scrollback gets nothing; screen gets all 4.
+        // screen.size()=4 > height=3 → pushTopLineToScrollback: "ABCDE" → scrollback.
+        // Final: sb=["ABCDE"(sw=T)], screen=["FGHIJ"(sw=F),"blank","blank"].
+        TerminalBuffer buf = new TerminalBuffer(10, 3);
+        buf.writeOnLine("ABCDEFGHIJ");
+        assertFalse(buf.getScreen().get(0).wasWrapped());
+        buf.resize(5, 3);
+        // "ABCDE"(sw=true) ended up in scrollback; "FGHIJ"(sw=false) is on screen.
+        assertEquals(1, buf.getScrollbackSize());
+        assertTrue(buf.getScrollBack().getLast().wasWrapped());
+        assertFalse(buf.getScreen().get(0).wasWrapped());
+    }
+}
 }

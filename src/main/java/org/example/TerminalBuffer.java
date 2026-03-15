@@ -159,6 +159,7 @@ public class TerminalBuffer {
      * */
     public void writeOnLine(String text) {
         if(text == null) throw new NullPointerException("Text cannot be null");
+        screen.get(this.cursorRow).setWrapped(false);
         for (int i = 0; i < text.length(); i++) {
             char ch = text.charAt(i);
             if(WideCharUtil.isWide(ch) && this.cursorColumn + 1 >= width) return;
@@ -195,7 +196,7 @@ public class TerminalBuffer {
             int col = this.cursorColumn;
             int row = this.cursorRow;
             char ch = getScreenCharAt(row, col);
-            while(ch != '\0') {
+            while(ch !=  Cell.EMPTY_CHARACTER) {
                 sb.append(ch);
                 col += 1;
                 if(col >= width) {
@@ -210,8 +211,10 @@ public class TerminalBuffer {
         for (int i = 0; i < toInsert.length(); i++) {
             char ch = toInsert.charAt(i);
             boolean wide = WideCharUtil.isWide(ch);
-            if(wide && this.cursorColumn == width-1) advanceCursorToNextLine();
-            if(this.cursorColumn >= width) advanceCursorToNextLine();
+            if((wide && this.cursorColumn == width-1) || this.cursorColumn >= width) {
+                screen.get(this.cursorRow).setWrapped(true);
+                advanceCursorToNextLine();
+            }
             writeCharToCursor(ch);
         }
         if(this.cursorColumn >= width && override) advanceCursorToNextLine();
@@ -317,11 +320,11 @@ public class TerminalBuffer {
         // Build a unified list (scrollback first, then screen) so the unwrap
         // pass can see across the scrollback/screen boundary uniformly.
         List<Line> all = new ArrayList<>(scrollBack.size() + screen.size());
-        // copy to avoid aliasing
+
         all.addAll(scrollBack);
         all.addAll(screen);
 
-        // Reflow pass: walk each line.  If isSoftWrapped() is true, this line
+        // Reflow pass: walk each line.  If wasWrapped() is true, this line
         // and its successor belong to the same logical paragraph — append
         // content without a hard break so they can be re-partitioned together.
         // Otherwise insert a hard break (pad to the next line boundary).
